@@ -7,7 +7,7 @@
 #$ -N hp_csp_run
 #$ -o logs/hp_csp_run/
 
-module load conda
+module load miniforge
 
 cd HP-CSP
 conda activate HP-CSP
