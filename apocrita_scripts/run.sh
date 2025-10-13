@@ -27,6 +27,6 @@ echo "Python version: $(python --version)"
 echo "Starting HP-CSP training..."
 
 # Single line command to avoid line continuation issues
-uv run main.py run-hp "HPH2PHPH2PH9P3HPHPH4P2H2PHPHPH2P3H4P4HP2H2PHP2HPHPH3P2H4PH3P2HP3HPH3PH3P2HPHPH7PHPH3PHP2HPH2PHPH2PHPH5P2HPH2PH4PHP6HPHP3H3PHP3HPH5PH6PHPHPHPH4PHP4H5P2HP2HP" -L 11 --dim 3 --time 3420 --workers 15 --viz none --snap out/fold.png
+uv run main.py run-hp "HPH2PHPH2PH9P3HPHPH4P2H2PHPHPH2P3H4P4HP2H2PHP2HPHPH3P2H4PH3P2HP3HPH3PH3P2HPHPH7PHPH3PHP2HPH2PHPH2PHPH5P2HPH2PH4PHP6HPHP3H3PHP3HPH5PH6PHPHPHPH4PHP4H5P2HP2HP" -L 9 --dim 3 --time 3420 --workers 15 --viz none --save-solution out/fold.json
 
 echo "Job completed at: $(date)"

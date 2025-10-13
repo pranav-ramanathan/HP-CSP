@@ -325,13 +325,25 @@ def render_3d_html(seq: str,
             hoverinfo='skip'
         ))
     
-    # Add H-H contact edges (if requested)
+    # Add H-H contact edges (if requested). Accept either index pairs (i,j)
+    # or coordinate pairs ((ux,uy,uz),(vx,vy,vz)).
     if show_contacts:
-        for i, j in contacts_hh:
+        for e in contacts_hh:
+            try:
+                i, j = e  # attempt to unpack
+            except Exception:
+                continue
+            # Branch on type: indices are ints; coordinates are sequences
+            if isinstance(i, int) and isinstance(j, int):
+                xx, yy, zz = [xs[i], xs[j]], [ys[i], ys[j]], [zs[i], zs[j]]
+            else:
+                u, v = i, j
+                # Support 2D coords by lifting to z=0
+                ux, uy, uz = (u[0], u[1], (u[2] if len(u) > 2 else 0))
+                vx, vy, vz = (v[0], v[1], (v[2] if len(v) > 2 else 0))
+                xx, yy, zz = [ux, vx], [uy, vy], [uz, vz]
             fig.add_trace(go.Scatter3d(
-                x=[xs[i], xs[j]],
-                y=[ys[i], ys[j]],
-                z=[zs[i], zs[j]],
+                x=xx, y=yy, z=zz,
                 mode='lines',
                 line=dict(color='rgba(255, 200, 0, 0.3)', width=3, dash='dot'),
                 showlegend=False,

@@ -168,8 +168,18 @@ def _render_pyvista(
     
     # Add H-H contact tubes
     if show_contacts and contacts_hh:
-        for i, j in contacts_hh:
-            p0, p1 = coords[i], coords[j]
+        for e in contacts_hh:
+            try:
+                i, j = e
+                if isinstance(i, int) and isinstance(j, int):
+                    p0, p1 = coords[i], coords[j]
+                else:
+                    u, v = e
+                    u3 = (u[0], u[1], (u[2] if len(u) > 2 else 0.0))
+                    v3 = (v[0], v[1], (v[2] if len(v) > 2 else 0.0))
+                    p0, p1 = u3, v3
+            except Exception:
+                continue
             line = pv.Line(p0, p1)
             tube = line.tube(radius=tube_radius * 0.5, n_sides=12)
             pl.add_mesh(tube, color='#39b54a', opacity=0.35, smooth_shading=True)
@@ -313,8 +323,18 @@ def _render_vedo(
     
     # Add H-H contact tubes
     if show_contacts and contacts_hh:
-        for i, j in contacts_hh:
-            p0, p1 = coords[i], coords[j]
+        for e in contacts_hh:
+            try:
+                i, j = e
+                if isinstance(i, int) and isinstance(j, int):
+                    p0, p1 = coords[i], coords[j]
+                else:
+                    u, v = e
+                    u3 = (u[0], u[1], (u[2] if len(u) > 2 else 0.0))
+                    v3 = (v[0], v[1], (v[2] if len(v) > 2 else 0.0))
+                    p0, p1 = u3, v3
+            except Exception:
+                continue
             tube = Tube([p0, p1], r=tube_radius * 0.5, c='#39b54a', alpha=0.35)
             tube.phong()
             objects.append(tube)
@@ -378,8 +398,18 @@ def _save_vedo(
     
     # Add H-H contact tubes
     if show_contacts and contacts_hh:
-        for i, j in contacts_hh:
-            p0, p1 = coords[i], coords[j]
+        for e in contacts_hh:
+            try:
+                i, j = e
+                if isinstance(i, int) and isinstance(j, int):
+                    p0, p1 = coords[i], coords[j]
+                else:
+                    u, v = e
+                    u3 = (u[0], u[1], (u[2] if len(u) > 2 else 0.0))
+                    v3 = (v[0], v[1], (v[2] if len(v) > 2 else 0.0))
+                    p0, p1 = u3, v3
+            except Exception:
+                continue
             tube = Tube([p0, p1], r=tube_radius * 0.5, c='#39b54a', alpha=0.35)
             tube.phong()
             objects.append(tube)

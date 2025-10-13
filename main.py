@@ -7,6 +7,7 @@ Supports both 2D and 3D lattice folding with optional interactive visualization.
 from typing import Literal, Optional, List
 import logging
 from pathlib import Path
+import json
 from ortools.sat.python import cp_model
 from rich.console import Console
 import typer
@@ -34,7 +35,8 @@ def run_hp(
     snap: Optional[str] = typer.Option(None, "--snap", help="Save snapshot to PNG file (offscreen rendering)"),
     strict: bool = typer.Option(False, "--strict", help="Error on any char outside [H P 0-9 Unicode subscripts whitespace]"),
     print_expanded: bool = typer.Option(False, "--print-expanded", help="Print the expanded sequence (clipped to 200 chars)"),
-    expect_length: Optional[int] = typer.Option(None, "--expect-length", help="Assert expanded length equals this value")
+    expect_length: Optional[int] = typer.Option(None, "--expect-length", help="Assert expanded length equals this value"),
+    save_solution: Optional[str] = typer.Option(None, "--save-solution", help="Write solution JSON (seq, L, dim, positions, contacts, energy)")
 ):
     """
     [bold cyan]HP protein folding solver using OR-Tools CP-SAT.[/bold cyan]
@@ -83,16 +85,16 @@ def run_hp(
     
     if dim == 2:
         # ========== 2D MODE (UNCHANGED) ==========
-        run_hp_2d(seq, L, time_limit, workers, viz, snap)
+        run_hp_2d(seq, L, time_limit, workers, viz, snap, save_solution)
     elif dim == 3:
         # ========== 3D MODE ==========
-        run_hp_3d(seq, L, time_limit, workers, viz, snap)
+        run_hp_3d(seq, L, time_limit, workers, viz, snap, save_solution)
     else:
         console.print(f"[red]Error: Invalid dimension {dim}. Use 2 or 3.[/red]")
         raise typer.Exit(1)
 
 
-def run_hp_2d(seq: str, L: int, time_limit: float, workers: int, viz: str, snap: Optional[str]):
+def run_hp_2d(seq: str, L: int, time_limit: float, workers: int, viz: str, snap: Optional[str], save_solution: Optional[str]):
     """
     Run 2D HP folding with optional visualization.
     """
@@ -105,7 +107,7 @@ def run_hp_2d(seq: str, L: int, time_limit: float, workers: int, viz: str, snap:
     # Vars
     X = hp2d.declare_vars(model, n=len(seq), cells=cells)
 
-    # Core constraints
+# Core constraints
     hp2d.add_exactly_one_cell_per_residue(model, X, cells)
     hp2d.add_at_most_one_residue_per_cell(model, X, cells)
     hp2d.add_chain_adjacency_allowed_pairs(model, X, nbrs, cells)
@@ -147,6 +149,26 @@ def run_hp_2d(seq: str, L: int, time_limit: float, workers: int, viz: str, snap:
     for row in grid:
         console.print(" ".join(row))
     
+    # Save solution JSON if requested
+    if save_solution:
+        outp = Path(save_solution)
+        outp.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "sequence": seq,
+            "L": L,
+            "dim": 2,
+            "positions": {int(i): [int(x), int(y)] for i, (x, y) in pos.items()},
+            "contacts_edges": [
+                [[int(u[0]), int(u[1])], [int(v[0]), int(v[1])]] for (u, v) in contacts_realized
+            ],
+            "contacts": num_contacts,
+            "energy_epsHH": int(energy),
+            "status": "saved"
+        }
+        with open(outp, 'w') as f:
+            json.dump(payload, f, indent=2)
+        console.print(f"[green]✓ Solution saved to: {outp}[/green]")
+
     # Auto-save PNG for 2D viz unless overridden by --snap
     auto_png = f"folding_2d_{seq[:10]}.png"
     
@@ -162,7 +184,7 @@ def run_hp_2d(seq: str, L: int, time_limit: float, workers: int, viz: str, snap:
             viz_native.render_native_3d(seq, pos_3d, contacts_realized, show_contacts=True, energy_epsHH=energy)
 
 
-def run_hp_3d(seq: str, L: int, time_limit: float, workers: int, viz: str, snap: Optional[str]):
+def run_hp_3d(seq: str, L: int, time_limit: float, workers: int, viz: str, snap: Optional[str], save_solution: Optional[str]):
     """
     Run 3D HP folding with optional visualization.
     """
@@ -213,6 +235,26 @@ def run_hp_3d(seq: str, L: int, time_limit: float, workers: int, viz: str, snap:
 
     # Print Z-slices for debugging
     hp3d.print_3d_slices(seq, pos, L)
+
+    # Save solution JSON if requested
+    if save_solution:
+        outp = Path(save_solution)
+        outp.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "sequence": seq,
+            "L": L,
+            "dim": 3,
+            "positions": {int(i): [int(p[0]), int(p[1]), int(p[2])] for i, p in pos.items()},
+            "contacts_edges": [
+                [[int(u[0]), int(u[1]), int(u[2])], [int(v[0]), int(v[1]), int(v[2])]] for (u, v) in realized_contacts
+            ],
+            "contacts": contacts_count,
+            "energy_epsHH": int(energy),
+            "status": "saved"
+        }
+        with open(outp, 'w') as f:
+            json.dump(payload, f, indent=2)
+        console.print(f"[green]✓ Solution saved to: {outp}[/green]")
 
     # Visualization
     if viz == "3d":
@@ -336,6 +378,46 @@ def batch(
     console.print(f"  Total sequences: {total_sequences}")
     console.print(f"  Optimal solutions: {optimal_count} ({optimal_count/total_sequences*100:.1f}%)")
     console.print(f"  Average energy: {avg_energy:.2f} ε_HH")
+
+
+@app.command()
+def view_solution(
+    path: str = typer.Argument(..., help="Path to solution JSON produced by --save-solution"),
+    viz: Literal["3d", "native"] = typer.Option("native", "--viz", help="Viewer: '3d' (Plotly HTML) or 'native' (PyVista/vedo)"),
+    out_html: Optional[str] = typer.Option(None, "--out-html", help="Output HTML path for Plotly viewer"),
+    snap: Optional[str] = typer.Option(None, "--snap", help="Save PNG snapshot (native viewer offscreen)")
+):
+    """
+    Load a saved solution JSON (from --save-solution) and render it locally.
+    """
+    p = Path(path)
+    if not p.exists():
+        console.print(f"[red]File not found:[/red] {path}")
+        raise typer.Exit(1)
+    data = json.loads(p.read_text())
+    seq = data["sequence"]
+    L = int(data["L"])  # not used in rendering
+    dim = int(data.get("dim", 3))
+    positions = {int(i): tuple(coords) for i, coords in data["positions"].items()}
+    contacts_edges = [ (tuple(u), tuple(v)) for u, v in data.get("contacts_edges", []) ]
+    energy = int(data.get("energy_epsHH", 0))
+
+    if viz == "3d":
+        out = out_html or f"folding_3d_view_{seq[:10]}.html"
+        if dim == 2:
+            pos3 = {i: (x, y, 0) for i, (x, y) in positions.items()}
+        else:
+            pos3 = positions
+        hp3d.render_3d_html(seq, pos3, contacts_hh=contacts_edges, out_html=out, show_contacts=True, energy_epsHH=energy)
+        console.print(f"[green]✓ HTML saved to: {out}[/green]")
+    else:
+        if dim == 2:
+            pos3 = {i: (x, y, 0) for i, (x, y) in positions.items()}
+        else:
+            pos3 = positions
+        if snap:
+            viz_native.save_native_3d(seq, pos3, snap, contacts_hh=contacts_edges, show_contacts=True, energy_epsHH=energy)
+        viz_native.render_native_3d(seq, pos3, contacts_hh=contacts_edges, show_contacts=True, energy_epsHH=energy)
 
 
 if __name__ == "__main__":
