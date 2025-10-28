@@ -36,6 +36,22 @@ uv run main.py run-hp "HPPH" -L 6 --dim 3 --viz 3d
 uv run main.py run-hp "HPPH" -L 6 --dim 3 --viz native --snap out/fold.png
 ```
 
+### Use tuned CP-SAT parameters
+
+```bash
+# Tune on a sequence set (20 min budget; 60s per solve)
+uv run main.py tune-cpsat -s HPHPPH -L 6 --dim 3 --time 60 --workers 8 --budget 1200
+
+# Run with tuned params (auto-resolve by dim/L/n)
+uv run main.py run-hp "HPHPPH" -L 6 --dim 3 --time 60 --use-tuned
+
+# Or provide an explicit params file
+uv run main.py run-hp "HPHPPH" -L 6 --dim 3 --time 60 --params out/tuned/hp_3d_L6_n6.json
+
+# Batch with tuned params
+uv run main.py batch --file sequences.txt -L 6 --dim 3 --time 60 --use-tuned
+```
+
 ## Compressed Input (ASCII and Unicode subscripts)
 
 Items: `H` or `P` optionally followed by a count (ASCII `0-9` or Unicode subscripts). Whitespace/newlines/commas are ignored by default.

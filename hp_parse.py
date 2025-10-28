@@ -28,17 +28,18 @@ def _is_sub_digit(ch: str) -> bool:
 
 def expand_hp_sequence(raw: str, strict: bool = False) -> Tuple[str, List[str]]:
     """
-    Expand a compressed HP sequence string.
+    Expand a compressed HP sequence string with group repeats.
 
     Grammar:
       sequence := item+
-      item     := letter count?
+      item     := atom count?
+      atom     := letter | '(' sequence ')'
       letter   := 'H' | 'P'
       count    := ascii_digits | unicode_subscript_digits
 
     Rules:
-      - Mixed count styles (e.g., H₂3) are an error.
-      - Zero repeats (H0 or H₀) are not allowed.
+      - Mixed digit styles within one count (e.g., H₂3) are an error.
+      - Zero repeats (…0 or …₀) are not allowed.
       - Unknown characters are ignored with a warning by default; in strict mode, error.
 
     Args:
@@ -49,76 +50,106 @@ def expand_hp_sequence(raw: str, strict: bool = False) -> Tuple[str, List[str]]:
         (expanded_sequence, warnings)
     """
     s = raw
-    i = 0
     n = len(s)
-    out: List[str] = []
     warnings: List[str] = []
 
     def err(msg: str) -> None:
         raise ParseError(msg)
 
-    while i < n:
-        ch = s[i]
+    def read_count(i: int) -> Tuple[int, int]:
+        count_str = ''
+        count_style = None  # 'ascii' or 'sub'
+        j = i
+        while j < n:
+            c = s[j]
+            if _is_ascii_digit(c):
+                if count_style is None:
+                    count_style = 'ascii'
+                elif count_style != 'ascii':
+                    err("Mixed digit styles in count (ASCII + subscript)")
+                count_str += c
+                j += 1
+                continue
+            if _is_sub_digit(c):
+                if count_style is None:
+                    count_style = 'sub'
+                elif count_style != 'sub':
+                    err("Mixed digit styles in count (ASCII + subscript)")
+                count_str += SUBSCRIPT_MAP[c]
+                j += 1
+                continue
+            break
+        if count_str == '':
+            return 1, i
+        try:
+            val = int(count_str)
+        except ValueError:
+            err(f"Invalid count: '{count_str}'")
+        if val == 0:
+            err("Zero repeats not allowed")
+        return val, j
 
-        # Skip whitespace and common separators by default
-        if ch.isspace() or ch in {',', ';', '.', '-', '_', '(', ')', '[', ']', '{', '}'}:
-            i += 1
-            continue
+    def parse_seq(i: int, end_char: str = None) -> Tuple[str, int]:
+        out_parts: List[str] = []
+        j = i
+        while j < n:
+            ch = s[j]
+            # End of a parenthesized group
+            if end_char is not None and ch == end_char:
+                j += 1
+                return ''.join(out_parts), j
 
-        if ch == 'H' or ch == 'P':
-            letter = ch
-            i += 1
-            # Parse optional count: ascii or subscript, but not mixed
-            count_str = ''
-            count_style = None  # 'ascii' or 'sub'
-            while i < n:
-                c2 = s[i]
-                if _is_ascii_digit(c2):
-                    if count_style is None:
-                        count_style = 'ascii'
-                    elif count_style != 'ascii':
-                        err("Mixed digit styles in count (ASCII + subscript)")
-                    count_str += c2
-                    i += 1
-                    continue
-                if _is_sub_digit(c2):
-                    if count_style is None:
-                        count_style = 'sub'
-                    elif count_style != 'sub':
-                        err("Mixed digit styles in count (ASCII + subscript)")
-                    count_str += SUBSCRIPT_MAP[c2]
-                    i += 1
-                    continue
-                break
+            # Whitespace and common separators (parentheses handled explicitly)
+            if ch.isspace() or ch in {',', ';', '.', '-', '_'}:
+                j += 1
+                continue
 
-            if count_str == '':
-                count = 1
-            else:
-                # Leading zeros are allowed but zero itself is not
-                try:
-                    count = int(count_str)
-                except ValueError:
-                    err(f"Invalid count after {letter}: '{count_str}'")
-                if count == 0:
-                    err("Zero repeats not allowed")
-            out.append(letter * count)
-            continue
+            # Single letters with optional count
+            if ch == 'H' or ch == 'P':
+                letter = ch
+                j += 1
+                cnt, j = read_count(j)
+                out_parts.append(letter * cnt)
+                continue
 
-        # Standalone digits (without preceding H/P)
-        if _is_ascii_digit(ch) or _is_sub_digit(ch):
+            # Parenthesized group
+            if ch == '(':
+                j += 1
+                inner, j = parse_seq(j, end_char=')')
+                cnt, j = read_count(j)
+                out_parts.append(inner * cnt)
+                continue
+
+            # Unmatched ')'
+            if ch == ')':
+                if strict:
+                    err("Unmatched ')'")
+                warnings.append("Ignoring unmatched ')'")
+                j += 1
+                continue
+
+            # Standalone digits (no preceding letter/group)
+            if _is_ascii_digit(ch) or _is_sub_digit(ch):
+                if strict:
+                    err("Count without preceding letter/group")
+                warnings.append("Ignoring standalone digits without preceding letter/group")
+                j += 1
+                continue
+
+            # Unknown characters
+            if strict and not ch.isspace():
+                err(f"Illegal character in strict mode: '{ch}'")
+            warnings.append(f"Ignoring unknown character: '{ch}'")
+            j += 1
+
+        # If we were inside a group and hit end-of-string, it's an error in strict mode
+        if end_char is not None:
             if strict:
-                err("Count without preceding letter (H/P)")
-            warnings.append("Ignoring standalone digits without preceding H/P")
-            i += 1
-            continue
+                err("Unclosed '(' group")
+            warnings.append("Unclosed '(' group (ignored)")
+        return ''.join(out_parts), j
 
-        # Unknown characters
-        if strict and not ch.isspace():
-            err(f"Illegal character in strict mode: '{ch}'")
-        warnings.append(f"Ignoring unknown character: '{ch}'")
-        i += 1
-
-    expanded = ''.join(out)
+    expanded, _ = parse_seq(0, end_char=None)
     if len(expanded) == 0:
         err("Empty sequence.")
     # Validate alphabet

@@ -1,8 +1,9 @@
-from typing import Dict, List, Tuple, Iterable, Sequence, Optional
+from typing import Dict, List, Tuple, Iterable, Sequence, Optional, Mapping
 import logging
 from ortools.sat.python import cp_model
 from rich.console import Console
 import typer
+import tune_params
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -232,7 +233,8 @@ def set_objective_max_contacts(model: cp_model.CpModel,
 
 def configure_solver(solver: cp_model.CpSolver,
                      time_limit_s: float = 10.0,
-                     workers: int = 8) -> None:
+                     workers: int = 8,
+                     params: Optional[Mapping[str, object]] = None) -> None:
     """
     Set standard knobs, e.g.:
       solver.parameters.max_time_in_seconds = time_limit_s
@@ -243,6 +245,8 @@ def configure_solver(solver: cp_model.CpSolver,
     
     solver.parameters.max_time_in_seconds = time_limit_s
     solver.parameters.num_search_workers = workers
+    # Apply tuned parameters (if any) after base knobs so CLI remains authoritative
+    tune_params.apply_solver_params(solver, params)
     console.print(f"[dim]Time limit and workers set...[/dim]")
 
 

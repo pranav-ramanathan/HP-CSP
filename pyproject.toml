@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "cpsat-autotune",
     "ortools>=9.14.6206",
     "plotly>=6.3.1",
     "pyvista>=0.46.3",
@@ -12,3 +13,6 @@ dependencies = [
     "typer>=0.19.2",
     "vedo>=2025.5.4",
 ]
+
+[tool.uv.sources]
+cpsat-autotune = { git = "https://github.com/d-krupke/cpsat-autotune" }

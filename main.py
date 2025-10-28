@@ -18,6 +18,8 @@ import hp3d
 import hp_eval
 import viz_native
 import hp_parse
+import tune_params
+from tools.tune_cpsat import TuningInstance, tune as tune_cpsat, save_best_params
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -36,7 +38,9 @@ def run_hp(
     strict: bool = typer.Option(False, "--strict", help="Error on any char outside [H P 0-9 Unicode subscripts whitespace]"),
     print_expanded: bool = typer.Option(False, "--print-expanded", help="Print the expanded sequence (clipped to 200 chars)"),
     expect_length: Optional[int] = typer.Option(None, "--expect-length", help="Assert expanded length equals this value"),
-    save_solution: Optional[str] = typer.Option(None, "--save-solution", help="Write solution JSON (seq, L, dim, positions, contacts, energy)")
+    save_solution: Optional[str] = typer.Option(None, "--save-solution", help="Write solution JSON (seq, L, dim, positions, contacts, energy)"),
+    params_path: Optional[str] = typer.Option(None, "--params", help="Path to tuned CP-SAT params JSON"),
+    use_tuned: bool = typer.Option(False, "--use-tuned", help="Auto-load tuned params for (dim,L,n) from out/tuned/")
 ):
     """
     [bold cyan]HP protein folding solver using OR-Tools CP-SAT.[/bold cyan]
@@ -83,18 +87,25 @@ def run_hp(
     # Replace input with expanded for solver
     seq = expanded
     
+    # Optional: load tuned params
+    tuned_params: Optional[dict] = None
+    if params_path:
+        tuned_params = tune_params.load_params(params_path)
+    elif use_tuned:
+        tuned_params = tune_params.resolve_params_for(dim, L, len(seq))
+
     if dim == 2:
         # ========== 2D MODE (UNCHANGED) ==========
-        run_hp_2d(seq, L, time_limit, workers, viz, snap, save_solution)
+        run_hp_2d(seq, L, time_limit, workers, viz, snap, save_solution, tuned_params)
     elif dim == 3:
         # ========== 3D MODE ==========
-        run_hp_3d(seq, L, time_limit, workers, viz, snap, save_solution)
+        run_hp_3d(seq, L, time_limit, workers, viz, snap, save_solution, tuned_params)
     else:
         console.print(f"[red]Error: Invalid dimension {dim}. Use 2 or 3.[/red]")
         raise typer.Exit(1)
 
 
-def run_hp_2d(seq: str, L: int, time_limit: float, workers: int, viz: str, snap: Optional[str], save_solution: Optional[str]):
+def run_hp_2d(seq: str, L: int, time_limit: float, workers: int, viz: str, snap: Optional[str], save_solution: Optional[str], params: Optional[dict]):
     """
     Run 2D HP folding with optional visualization.
     """
@@ -121,7 +132,7 @@ def run_hp_2d(seq: str, L: int, time_limit: float, workers: int, viz: str, snap:
 
     # Solve
     solver = cp_model.CpSolver()
-    hp2d.configure_solver(solver, time_limit_s=time_limit, workers=workers)
+    hp2d.configure_solver(solver, time_limit_s=time_limit, workers=workers, params=params)
     status = solver.Solve(model)
     console.print(f"[dim]Solve time: {solver.WallTime():.3f}s[/dim]")
 
@@ -184,7 +195,7 @@ def run_hp_2d(seq: str, L: int, time_limit: float, workers: int, viz: str, snap:
             viz_native.render_native_3d(seq, pos_3d, contacts_realized, show_contacts=True, energy_epsHH=energy)
 
 
-def run_hp_3d(seq: str, L: int, time_limit: float, workers: int, viz: str, snap: Optional[str], save_solution: Optional[str]):
+def run_hp_3d(seq: str, L: int, time_limit: float, workers: int, viz: str, snap: Optional[str], save_solution: Optional[str], params: Optional[dict]):
     """
     Run 3D HP folding with optional visualization.
     """
@@ -211,7 +222,7 @@ def run_hp_3d(seq: str, L: int, time_limit: float, workers: int, viz: str, snap:
 
     # Solve
     solver = cp_model.CpSolver()
-    hp2d.configure_solver(solver, time_limit_s=time_limit, workers=workers)  # Same as 2D
+    hp2d.configure_solver(solver, time_limit_s=time_limit, workers=workers, params=params)  # Same as 2D
     status = solver.Solve(model)
     console.print(f"[dim]Solve time: {solver.WallTime():.3f}s[/dim]")
 
@@ -299,7 +310,10 @@ def batch(
     csv_path: Optional[str] = typer.Option(None, "--csv", help="Output CSV file path"),
     json_path: Optional[str] = typer.Option(None, "--json", help="Output JSON file path"),
     latex_path: Optional[str] = typer.Option(None, "--latex", help="Output LaTeX file path"),
-    seeds: List[int] = typer.Option([], "--seed", help="Random seeds (one per run, can be repeated)")
+    seeds: List[int] = typer.Option([], "--seed", help="Random seeds (one per run, can be repeated)"),
+    params_path: Optional[str] = typer.Option(None, "--params", help="Path to tuned CP-SAT params JSON"),
+    use_tuned: bool = typer.Option(False, "--use-tuned", help="Auto-load tuned params for (dim,L,n) from out/tuned/"),
+    tuned_dir: Optional[str] = typer.Option(None, "--tuned-dir", help="Directory of tuned params (default out/tuned)")
 ):
     """
     [bold cyan]Batch evaluation of multiple HP sequences.[/bold cyan]
@@ -342,6 +356,11 @@ def batch(
             raise typer.Exit(1)
     
     # Run batch evaluation
+    # Load params (single dict applied to all) if provided
+    tuned_params: Optional[dict] = None
+    if params_path:
+        tuned_params = tune_params.load_params(params_path)
+
     results = hp_eval.evaluate_batch(
         sequences=all_sequences,
         L=L,
@@ -349,7 +368,10 @@ def batch(
         time_limit_s=time_limit,
         workers=workers,
         seeds=seeds if seeds else None,
-        runs_per_seq=runs
+        runs_per_seq=runs,
+        params=tuned_params,
+        use_tuned=(use_tuned and not tuned_params),
+        tuned_dir=tuned_dir
     )
     
     # Print summary table
@@ -418,6 +440,49 @@ def view_solution(
         if snap:
             viz_native.save_native_3d(seq, pos3, snap, contacts_hh=contacts_edges, show_contacts=True, energy_epsHH=energy)
         viz_native.render_native_3d(seq, pos3, contacts_hh=contacts_edges, show_contacts=True, energy_epsHH=energy)
+
+
+@app.command(name="tune-cpsat")
+def tune_cpsat_cmd(
+    sequences: List[str] = typer.Option([], "--seq", "-s", help="Sequence(s) to tune on (repeatable)"),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="File with sequences (one per line)"),
+    L: int = typer.Option(6, "--grid-size", "-L", help="Grid size"),
+    dim: Literal[2, 3] = typer.Option(3, "--dim", "-d", help="Dimension: 2 or 3"),
+    time_limit: float = typer.Option(60.0, "--time", "-t", help="Time limit per solve (s) during tuning"),
+    workers: int = typer.Option(8, "--workers", "-w", help="Number of parallel workers"),
+    budget: float = typer.Option(600.0, "--budget", help="Total tuning budget in seconds"),
+    trials: Optional[int] = typer.Option(None, "--trials", help="Maximum tuner evaluations"),
+    out_dir: str = typer.Option("out/tuned", "--out", help="Directory to save tuned params"),
+    key: Optional[str] = typer.Option(None, "--key", help="Override params key filename (without .json)")
+):
+    all_sequences = list(sequences)
+    if file:
+        file_path = Path(file)
+        if not file_path.exists():
+            console.print(f"[red]Error: File not found: {file}[/red]")
+            raise typer.Exit(1)
+        with open(file_path) as f:
+            file_sequences = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+            all_sequences.extend(file_sequences)
+    if not all_sequences:
+        console.print("[red]Error: No sequences provided. Use --seq or --file.[/red]")
+        raise typer.Exit(1)
+
+    inst = TuningInstance(sequences=all_sequences, L=L, dim=dim, time_limit_s=time_limit, workers=workers)
+    best_params = tune_cpsat(inst, budget_seconds=budget, max_trials=trials, search_space=None)
+    if not best_params:
+        console.print("[yellow]No tuned params produced (tuner unavailable or failed).[/yellow]")
+        raise typer.Exit(1)
+
+    n = len(all_sequences[0]) if len(all_sequences) == 1 else max(len(s) for s in all_sequences)
+    if key:
+        path = Path(out_dir) / f"{key}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tune_params.save_params(best_params, str(path), {"dim": dim, "L": L, "n": n})
+        console.print(f"[green]✓ Tuned params saved to: {path}[/green]")
+    else:
+        saved = save_best_params(best_params, dim=dim, L=L, n=n, out_dir=out_dir)
+        console.print(f"[green]✓ Tuned params saved to: {saved}[/green]")
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ HP Protein Folding Batch Evaluator
 Provides batch evaluation, energy computation, and results export for HP folding problems.
 """
 
-from typing import Dict, List, Tuple, Optional, Any, Callable
+from typing import Dict, List, Tuple, Optional, Any, Callable, Mapping
 import time
 import json
 import csv
@@ -18,6 +18,7 @@ from rich.table import Table
 
 import hp2d
 import hp3d
+import tune_params
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -92,7 +93,8 @@ def evaluate_sequence(
     dim: int,
     time_limit_s: float,
     workers: int,
-    seed: Optional[int] = None
+    seed: Optional[int] = None,
+    params: Optional[Mapping[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Evaluate a single HP sequence and return detailed results.
@@ -156,7 +158,7 @@ def evaluate_sequence(
     
     # Configure solver
     solver = cp_model.CpSolver()
-    hp2d.configure_solver(solver, time_limit_s=time_limit_s, workers=workers)
+    hp2d.configure_solver(solver, time_limit_s=time_limit_s, workers=workers, params=params)
     if seed is not None:
         solver.parameters.random_seed = seed
     
@@ -226,7 +228,10 @@ def evaluate_batch(
     time_limit_s: float,
     workers: int,
     seeds: Optional[List[int]] = None,
-    runs_per_seq: int = 1
+    runs_per_seq: int = 1,
+    params: Optional[Mapping[str, Any]] = None,
+    use_tuned: bool = False,
+    tuned_dir: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     Evaluate multiple sequences in batch mode.
@@ -268,7 +273,14 @@ def evaluate_batch(
         run_results = []
         for run in range(runs_per_seq):
             seed = seeds[run] if seeds and run < len(seeds) else None
-            result = evaluate_sequence(seq, L, dim, time_limit_s, workers, seed)
+            # Resolve per-sequence params if requested
+            if params is not None:
+                params_this = params
+            elif use_tuned:
+                params_this = tune_params.resolve_params_for(dim, L, len(seq), tuned_dir or "out/tuned")
+            else:
+                params_this = None
+            result = evaluate_sequence(seq, L, dim, time_limit_s, workers, seed, params_this)
             run_results.append(result)
             
             console.print(f"  Run {run + 1}: E/ε_HH = {result['energy_epsHH']}, "
