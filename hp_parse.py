@@ -13,6 +13,11 @@ SUBSCRIPT_MAP = {
     '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9',
 }
 
+SUPERSCRIPT_MAP = {
+    '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4',
+    '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
+}
+
 
 class ParseError(ValueError):
     """Raised for invalid compressed HP sequences."""
@@ -24,6 +29,10 @@ def _is_ascii_digit(ch: str) -> bool:
 
 def _is_sub_digit(ch: str) -> bool:
     return ch in SUBSCRIPT_MAP
+
+
+def _is_super_digit(ch: str) -> bool:
+    return ch in SUPERSCRIPT_MAP
 
 
 def expand_hp_sequence(raw: str, strict: bool = False) -> Tuple[str, List[str]]:
@@ -58,7 +67,7 @@ def expand_hp_sequence(raw: str, strict: bool = False) -> Tuple[str, List[str]]:
 
     def read_count(i: int) -> Tuple[int, int]:
         count_str = ''
-        count_style = None  # 'ascii' or 'sub'
+        count_style = None  # 'ascii', 'sub', or 'super'
         j = i
         while j < n:
             c = s[j]
@@ -76,6 +85,14 @@ def expand_hp_sequence(raw: str, strict: bool = False) -> Tuple[str, List[str]]:
                 elif count_style != 'sub':
                     err("Mixed digit styles in count (ASCII + subscript)")
                 count_str += SUBSCRIPT_MAP[c]
+                j += 1
+                continue
+            if _is_super_digit(c):
+                if count_style is None:
+                    count_style = 'super'
+                elif count_style != 'super':
+                    err("Mixed digit styles in count (ASCII + superscript)")
+                count_str += SUPERSCRIPT_MAP[c]
                 j += 1
                 continue
             break

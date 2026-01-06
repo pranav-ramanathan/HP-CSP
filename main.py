@@ -20,6 +20,7 @@ import viz_native
 import hp_parse
 import tune_params
 from tools.tune_cpsat import TuningInstance, tune as tune_cpsat, save_best_params
+from tools.optimize_settings import optimize_for_sequence, save_optimization_result
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -483,6 +484,93 @@ def tune_cpsat_cmd(
     else:
         saved = save_best_params(best_params, dim=dim, L=L, n=n, out_dir=out_dir)
         console.print(f"[green]✓ Tuned params saved to: {saved}[/green]")
+
+
+@app.command(name="optimize-settings")
+def optimize_settings_cmd(
+    seq: str = typer.Argument(..., help="Sequence string (plain or compressed, e.g., 'P2H3PH3P3...')"),
+    dim: Literal[2, 3] = typer.Option(3, "--dim", "-d", help="Dimension (only 3D currently optimized)"),
+    time_budget: float = typer.Option(300.0, "--time-budget", "-t", help="Total time budget for optimization (seconds)"),
+    workers: int = typer.Option(8, "--workers", "-w", help="Number of parallel workers"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Save optimization result to JSON"),
+    skip_grid_search: bool = typer.Option(False, "--skip-grid-search", help="Skip grid size optimization"),
+    skip_tuning: bool = typer.Option(False, "--skip-tuning", help="Skip CP-SAT parameter tuning"),
+    n_seeds: int = typer.Option(5, "--seeds", "-n", help="Number of random seeds to try"),
+    strict: bool = typer.Option(False, "--strict", help="Error on invalid sequence characters")
+):
+    """
+    [bold cyan]Find optimal solver settings for a 3D HP sequence.[/bold cyan]
+
+    Orchestrates multiple optimization strategies to find the best settings:
+    1. Grid size optimization - Find minimal L that allows good solutions
+    2. Multi-seed search - Run with different random seeds, take best
+    3. CP-SAT parameter tuning - Use cpsat-autotune for solver parameters
+
+    [yellow]Examples:[/yellow]
+      • Quick optimization (5 min):
+        [dim]$ python main.py optimize-settings "P2H3PH3P3HPH2..." --time-budget 300[/dim]
+
+      • Thorough optimization (15 min):
+        [dim]$ python main.py optimize-settings "P2H3PH3P3HPH2..." --time-budget 900 --seeds 10[/dim]
+
+      • Save results:
+        [dim]$ python main.py optimize-settings "P2H3PH3P3HPH2..." -o out/optimized/3d5.json[/dim]
+
+      • Skip tuning (faster):
+        [dim]$ python main.py optimize-settings "P2H3PH3P3HPH2..." --skip-tuning[/dim]
+    """
+    # Parse compressed/plain sequence
+    try:
+        expanded, warnings = hp_parse.expand_hp_sequence(seq, strict=strict)
+    except hp_parse.ParseError as e:
+        console.print(f"[red]Parse error:[/red] {e}")
+        raise typer.Exit(1)
+
+    console.print(f"[dim]Parsed sequence: {seq[:40]}{'...' if len(seq) > 40 else ''}[/dim]")
+    console.print(f"[dim]Expanded length: {len(expanded)}[/dim]")
+
+    if dim != 3:
+        console.print("[yellow]Warning: Optimization is primarily designed for 3D. 2D may work but is untested.[/yellow]")
+
+    # Run optimization
+    result = optimize_for_sequence(
+        seq=expanded,
+        dim=dim,
+        time_budget_s=time_budget,
+        workers=workers,
+        skip_grid_search=skip_grid_search,
+        skip_tuning=skip_tuning,
+        n_seeds=n_seeds
+    )
+
+    # Save if requested
+    if output:
+        save_optimization_result(result, output)
+
+    # Print final recommendations
+    console.print("\n[bold]Recommended Settings:[/bold]")
+    console.print(f"  Grid size (-L): {result.best_L}")
+    if result.best_seed:
+        console.print(f"  Random seed: {result.best_seed}")
+    if result.recommendations.get("recommended_seeds"):
+        console.print(f"  Top seeds: {result.recommendations['recommended_seeds']}")
+    if result.best_params:
+        console.print(f"  Tuned params: {len(result.best_params)} parameters found")
+        if output:
+            params_path = output.replace('.json', '_params.json')
+            tune_params.save_params(result.best_params, params_path,
+                                    {"dim": dim, "L": result.best_L, "n": len(expanded)})
+            console.print(f"  Params saved to: {params_path}")
+
+    console.print(f"\n[bold]Best Result:[/bold]")
+    console.print(f"  Energy: {result.best_energy} (contacts: {result.best_contacts})")
+
+    # Provide command to run with best settings
+    console.print(f"\n[bold]Run with best settings:[/bold]")
+    cmd_parts = [f'python main.py run-hp "{seq}"', f'-L {result.best_L}', '--dim 3']
+    if result.best_params and output:
+        cmd_parts.append(f'--params {output.replace(".json", "_params.json")}')
+    console.print(f"  [dim]{' '.join(cmd_parts)}[/dim]")
 
 
 if __name__ == "__main__":

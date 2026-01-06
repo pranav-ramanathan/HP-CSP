@@ -276,7 +276,7 @@ def render_3d_html(seq: str,
     Produce a standalone, interactive HTML with pan/zoom/rotate using Plotly.
     
     Features:
-    - Markers as spheres: H = green (#39b54a), P = gray (#b0b0b0)
+    - Markers as spheres: H = red (#d62728), P = blue (#1f77b4)
     - Chain edges as sticks connecting (i, i+1)
     - Optional thin, semi-transparent sticks for H-H contacts
     - Equal aspect ratio, sensible camera, hover text showing index and letter
@@ -306,8 +306,8 @@ def render_3d_html(seq: str,
     ys = [positions[i][1] for i in range(n)]
     zs = [positions[i][2] for i in range(n)]
     
-    # Colors: H=green, P=gray
-    colors = ['#39b54a' if seq[i] == 'H' else '#b0b0b0' for i in range(n)]
+    # Colors: H=red, P=blue
+    colors = ['#d62728' if seq[i] == 'H' else '#1f77b4' for i in range(n)]
     hover_text = [f"Residue {i}: {seq[i]}" for i in range(n)]
     
     # Create figure
@@ -345,7 +345,7 @@ def render_3d_html(seq: str,
             fig.add_trace(go.Scatter3d(
                 x=xx, y=yy, z=zz,
                 mode='lines',
-                line=dict(color='rgba(255, 200, 0, 0.3)', width=3, dash='dot'),
+                line=dict(color='rgba(214, 39, 40, 0.35)', width=3, dash='dot'),
                 showlegend=False,
                 hoverinfo='skip'
             ))
@@ -369,8 +369,8 @@ def render_3d_html(seq: str,
     
     # Legend entries (H/P colors)
     legend_items = [
-        dict(name="H (Hydrophobic)", marker=dict(color="#39b54a"), mode="markers"),
-        dict(name="P (Polar)", marker=dict(color="#b0b0b0"), mode="markers"),
+        dict(name="H (Hydrophobic)", marker=dict(color="#d62728"), mode="markers"),
+        dict(name="P (Polar)", marker=dict(color="#1f77b4"), mode="markers"),
     ]
 
     # Update layout (with optional energy in title)
@@ -399,7 +399,7 @@ def render_3d_html(seq: str,
     # Add a simple legend panel using annotations
     fig.add_annotation(
         x=0.01, y=0.98, xref='paper', yref='paper', showarrow=False,
-        text="<b>Legend</b><br>H: <span style='color:#39b54a;'>green</span><br>P: <span style='color:#b0b0b0;'>gray</span>",
+        text="<b>Legend</b><br>H: <span style='color:#d62728;'>red</span><br>P: <span style='color:#1f77b4;'>blue</span>",
         align='left', bgcolor='rgba(255,255,255,0.7)', bordercolor='#cccccc', borderwidth=1
     )
     

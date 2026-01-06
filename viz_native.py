@@ -45,7 +45,7 @@ def render_native_3d(
     Open an interactive native 3D viewer window with ball-and-stick protein model.
     
     Features:
-    - Spheres at residue positions (H=green, P=gray)
+    - Spheres at residue positions (H=red, P=blue)
     - Chain backbone as tubes between consecutive residues
     - Optional H-H contact tubes (semi-transparent)
     - Smooth shading, anti-aliasing, trackball camera
@@ -154,7 +154,7 @@ def _render_pyvista(
     
     # Add residue spheres
     for i, (x, y, z) in enumerate(coords):
-        color = '#39b54a' if seq[i] == 'H' else '#b0b0b0'
+        color = '#d62728' if seq[i] == 'H' else '#1f77b4'
         sphere = pv.Sphere(radius=sphere_radius, center=(x, y, z), theta_resolution=30, phi_resolution=30)
         pl.add_mesh(sphere, color=color, smooth_shading=True, specular=0.5, specular_power=20)
     
@@ -182,7 +182,7 @@ def _render_pyvista(
                 continue
             line = pv.Line(p0, p1)
             tube = line.tube(radius=tube_radius * 0.5, n_sides=12)
-            pl.add_mesh(tube, color='#39b54a', opacity=0.35, smooth_shading=True)
+            pl.add_mesh(tube, color='#d62728', opacity=0.35, smooth_shading=True)
     
     # Configure camera and lighting
     pl.enable_anti_aliasing('msaa')
@@ -193,7 +193,7 @@ def _render_pyvista(
     # Set title and legend overlay
     window_title = title or f"HP Folding: {seq[:30]}{'...' if len(seq) > 30 else ''}"
     pl.add_text(window_title, position='upper_edge', font_size=10, color='black')
-    pl.add_text("H: green    P: gray", position='lower_left', font_size=10, color='black',
+    pl.add_text("H: red    P: blue", position='lower_left', font_size=10, color='black',
                 shadow=True, viewport=True)
     if energy_epsHH is not None:
         pl.add_text(f"Energy E/ε_HH: {energy_epsHH}", position='lower_right', font_size=10, color='black',
@@ -236,7 +236,7 @@ def _save_pyvista(
     
     # Add residue spheres
     for i, (x, y, z) in enumerate(coords):
-        color = '#39b54a' if seq[i] == 'H' else '#b0b0b0'
+        color = '#d62728' if seq[i] == 'H' else '#1f77b4'
         sphere = pv.Sphere(radius=sphere_radius, center=(x, y, z), theta_resolution=30, phi_resolution=30)
         pl.add_mesh(sphere, color=color, smooth_shading=True, specular=0.5, specular_power=20)
     
@@ -254,7 +254,7 @@ def _save_pyvista(
             p0, p1 = coords[i], coords[j]
             line = pv.Line(p0, p1)
             tube = line.tube(radius=tube_radius * 0.5, n_sides=12)
-            pl.add_mesh(tube, color='#39b54a', opacity=0.35, smooth_shading=True)
+            pl.add_mesh(tube, color='#d62728', opacity=0.35, smooth_shading=True)
     
     # Configure camera and lighting
     pl.enable_anti_aliasing('msaa')
@@ -263,7 +263,7 @@ def _save_pyvista(
     pl.reset_camera()
     
     # Overlays
-    pl.add_text("H: green    P: gray", position='lower_left', font_size=10, color='black',
+    pl.add_text("H: red    P: blue", position='lower_left', font_size=10, color='black',
                 shadow=True, viewport=True)
     if energy_epsHH is not None:
         pl.add_text(f"Energy E/ε_HH: {energy_epsHH}", position='lower_right', font_size=10, color='black',
@@ -308,7 +308,7 @@ def _render_vedo(
     
     # Add residue spheres
     for i, (x, y, z) in enumerate(coords):
-        color = '#39b54a' if seq[i] == 'H' else '#b0b0b0'
+        color = '#d62728' if seq[i] == 'H' else '#1f77b4'
         sphere = Sphere(pos=(x, y, z), r=sphere_radius, c=color)
         sphere.phong()
         objects.append(sphere)
@@ -335,14 +335,14 @@ def _render_vedo(
                     p0, p1 = u3, v3
             except Exception:
                 continue
-            tube = Tube([p0, p1], r=tube_radius * 0.5, c='#39b54a', alpha=0.35)
+            tube = Tube([p0, p1], r=tube_radius * 0.5, c='#d62728', alpha=0.35)
             tube.phong()
             objects.append(tube)
     
     # Create plotter and show
     window_title = title or f"HP Folding: {seq[:30]}{'...' if len(seq) > 30 else ''}"
     plt = Plotter(bg=background, title=window_title, axes=0)
-    legend = Text2D("H: green    P: gray", pos='bottom-left', s=0.8, c='black', bg='white', alpha=0.7)
+    legend = Text2D("H: red    P: blue", pos='bottom-left', s=0.8, c='black', bg='white', alpha=0.7)
     objects.append(legend)
     if energy_epsHH is not None:
         energy_text = Text2D(f"Energy E/ε_HH: {energy_epsHH}", pos='bottom-right', s=0.8, c='black', bg='white', alpha=0.7)
@@ -383,7 +383,7 @@ def _save_vedo(
     
     # Add residue spheres
     for i, (x, y, z) in enumerate(coords):
-        color = '#39b54a' if seq[i] == 'H' else '#b0b0b0'
+        color = '#d62728' if seq[i] == 'H' else '#1f77b4'
         sphere = Sphere(pos=(x, y, z), r=sphere_radius, c=color)
         sphere.phong()
         objects.append(sphere)
@@ -410,7 +410,7 @@ def _save_vedo(
                     p0, p1 = u3, v3
             except Exception:
                 continue
-            tube = Tube([p0, p1], r=tube_radius * 0.5, c='#39b54a', alpha=0.35)
+            tube = Tube([p0, p1], r=tube_radius * 0.5, c='#d62728', alpha=0.35)
             tube.phong()
             objects.append(tube)
     
@@ -418,7 +418,7 @@ def _save_vedo(
     plt = Plotter(bg=background, offscreen=True, size=resolution, axes=0)
     # Overlays
     from vedo import Text2D as _Text2D
-    objects.append(_Text2D("H: green    P: gray", pos='bottom-left', s=0.8, c='black', bg='white', alpha=0.7))
+    objects.append(_Text2D("H: red    P: blue", pos='bottom-left', s=0.8, c='black', bg='white', alpha=0.7))
     if energy_epsHH is not None:
         objects.append(_Text2D(f"Energy E/ε_HH: {energy_epsHH}", pos='bottom-right', s=0.8, c='black', bg='white', alpha=0.7))
     plt.show(*objects, viewup="z")
